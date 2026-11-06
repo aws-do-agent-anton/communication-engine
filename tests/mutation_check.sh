@@ -3503,6 +3503,16 @@ run_mutation "schedule: answered DM asks spend the follow-up sweep's budget" \
   "('            fu_key = threads.followup_window_key(src.name)\n            for i, ch in enumerate(order):', '            fu_key = threads.followup_window_key(src.name)\n            for i, ch in enumerate(src.channels):')" \
   "test_schedule"
 
+run_mutation "threads: the follow-up sweep swallows a platform error on one thread" \
+  "core/threads.py" \
+  "('            reached = i                 # this root was not fetched: resume at it\n            break\n        except Exception as ex:  # noqa: BLE001 — recorded by ask, never swallowed\n            result[\"errors\"].extend((str(r[\"ts\"]), f\"{type(ex).__name__}: {ex}\")\n                                    for r in rows)', '            reached = i                 # this root was not fetched: resume at it\n            break\n        except Exception as ex:  # noqa: BLE001 — recorded by ask, never swallowed\n            pass')" \
+  "test_threads"
+
+run_mutation "threads: the follow-up sweep fetches a non-orderable id as if chronological" \
+  "core/threads.py" \
+  "('    for row in recently_answered_for(journal, channel, now - window_s):\n        if ts_order(row[\"ts\"])[0] != 0:', '    for row in recently_answered_for(journal, channel, now - window_s):\n        if False:')" \
+  "test_threads"
+
 echo
 echo "mutation_check: caught=$PASS survived/error=$FAIL"
 [ "$FAIL" -eq 0 ] && { echo "PASS — every removed property turned the suite red"; exit 0; }

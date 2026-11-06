@@ -520,6 +520,31 @@ class FollowupSweepTest(SweepHarness):
         self.assertEqual(res["next_start"], 1,
                          "the window must resume at the root the 429 refused")
 
+    def test_a_platform_error_on_one_follow_up_thread_is_reported_and_the_sweep_goes_on(self):
+        """As in sweep(): a deleted answered ask makes conversations.replies answer
+        thread_not_found forever. The follow-up sweep records it BY ASK, where the cycle
+        prints the sweep's ERROR lines, and still fetches the next root."""
+        self.answered("1.0", at=self.NOW - 120)
+        self.answered("2.0", at=self.NOW - 60)              # answered last: fetched first
+        self.reply("3.0", "U_ASKER", text="and where are the logs?")      # under 1.0
+        self.adapter.explode_on = "2.0"
+        res = sweep_followups(self.adapter, self.store, self.journal, "C1", now=self.NOW)
+        self.assertEqual([e[0] for e in res["errors"]], ["2.0"],
+                         "the failing follow-up thread must be named in the result")
+        self.assertIn("thread_not_found", res["errors"][0][1])
+        self.assertEqual((res["swept"], res["calls"]), (1, 2))
+        self.assertIn("3.0", [m["ts"] for m in res["replies"]],
+                      "the healthy root was not swept after the failing one")
+
+    def test_a_non_orderable_answered_ask_is_refused_by_name(self):
+        """As in sweep(): an email Message-ID orders lexicographically, not in time, so
+        "newer than the ask" would be a guess. The follow-up sweep refuses it by name."""
+        self.answered("<msg-1@example>", at=self.NOW - 60)
+        res = sweep_followups(self.adapter, self.store, self.journal, "C1", now=self.NOW)
+        self.assertEqual(self.adapter.calls, [], "a non-orderable id space was swept")
+        self.assertEqual([e[0] for e in res["errors"]], ["<msg-1@example>"])
+        self.assertIn("non-orderable", res["errors"][0][1])
+
     def test_an_adapter_without_replies_is_declared_absent(self):
         self.answered("1.0", at=self.NOW - 60)
         self.assertIsNone(sweep_followups(NoRepliesAdapter(), self.store, self.journal,
