@@ -25,13 +25,16 @@ HOOKS = ROOT / "scripts" / "install-hooks.sh"
 
 TOKEN_SHAPE = "xox" + "b-" + "0123456789" + "abcdef"          # the gate's slack-token class
 KEY_SHAPE = "AKIA" + "0123456789" + "ABCDEF"                   # the gate's aws-access-key class
+# The throwaway repositories must not read the host's git config: a global core.hooksPath would run
+# the host's hooks in them and skip the ones under test, and install-hooks.sh would read it too.
+GIT_ISOLATED = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
 
 
 def _run(args, text=None, cwd=None):
     with tempfile.NamedTemporaryFile("w", suffix=".denylist", delete=False) as f:
         empty_denylist = f.name
     try:
-        env = dict(os.environ, SANITIZE_DENYLIST_FILE=empty_denylist)
+        env = dict(os.environ, SANITIZE_DENYLIST_FILE=empty_denylist, **GIT_ISOLATED)
         return subprocess.run(["bash", str(SCRIPT), *args], input=text, text=True,
                               capture_output=True, env=env, cwd=cwd, timeout=120)
     finally:
@@ -39,7 +42,8 @@ def _run(args, text=None, cwd=None):
 
 
 def _git(cwd, *args, env=None):
-    return subprocess.run(["git", *args], cwd=cwd, text=True, capture_output=True, env=env, timeout=60)
+    return subprocess.run(["git", *args], cwd=cwd, text=True, capture_output=True,
+                          env=dict(os.environ if env is None else env, **GIT_ISOLATED), timeout=60)
 
 
 def _repo(tmp):
@@ -106,7 +110,7 @@ class CommitMsgHookTest(unittest.TestCase):
         for f in (GATE, SCRIPT, HOOKS):
             shutil.copy(f, scripts / f.name)
         r = subprocess.run(["bash", str(scripts / "install-hooks.sh")], cwd=repo, text=True,
-                           capture_output=True, timeout=60)
+                           capture_output=True, env=dict(os.environ, **GIT_ISOLATED), timeout=60)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         return repo
 
@@ -116,7 +120,8 @@ class CommitMsgHookTest(unittest.TestCase):
             hook = repo / ".git" / "hooks" / "commit-msg"
             self.assertTrue(hook.is_file(), "install-hooks.sh did not install a commit-msg hook")
             self.assertTrue(os.access(hook, os.X_OK))
-            env = dict(os.environ, SANITIZE_DENYLIST_FILE=str(pathlib.Path(tmp) / "empty.denylist"))
+            env = dict(os.environ, SANITIZE_DENYLIST_FILE=str(pathlib.Path(tmp) / "empty.denylist"),
+                       **GIT_ISOLATED)
             pathlib.Path(env["SANITIZE_DENYLIST_FILE"]).write_text("")
             bad = pathlib.Path(tmp) / "bad.txt"; bad.write_text("ship it " + TOKEN_SHAPE + "\n")
             good = pathlib.Path(tmp) / "good.txt"; good.write_text("ship the sweep fix\n")
@@ -128,7 +133,8 @@ class CommitMsgHookTest(unittest.TestCase):
     def test_git_commit_itself_is_refused_and_leaves_no_commit(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = self._repo_with_hooks(tmp)
-            env = dict(os.environ, SANITIZE_DENYLIST_FILE=str(pathlib.Path(tmp) / "empty.denylist"))
+            env = dict(os.environ, SANITIZE_DENYLIST_FILE=str(pathlib.Path(tmp) / "empty.denylist"),
+                       **GIT_ISOLATED)
             pathlib.Path(env["SANITIZE_DENYLIST_FILE"]).write_text("")
             before = _git(repo, "rev-list", "--count", "HEAD").stdout.strip()
             (repo / "d.txt").write_text("four\n"); _git(repo, "add", "d.txt")
@@ -151,7 +157,7 @@ class CommitMsgHookTest(unittest.TestCase):
             shared = pathlib.Path(tmp) / "shared-hooks"; shared.mkdir()
             r = _git(repo, "config", "core.hooksPath", str(shared)); self.assertEqual(r.returncode, 0, r.stderr)
             r = subprocess.run(["bash", str(scripts / "install-hooks.sh")], cwd=repo, text=True,
-                               capture_output=True, timeout=60)
+                               capture_output=True, env=dict(os.environ, **GIT_ISOLATED), timeout=60)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             self.assertEqual(sorted(p.name for p in shared.iterdir()), [],
                              "install-hooks.sh wrote into the core.hooksPath directory")
