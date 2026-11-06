@@ -283,6 +283,9 @@ class Scheduler:
             # an ask, owed. Lowest priority: only what the open asks left of this budget,
             # one call still reserved for every channel waiting, nothing after a 429. It
             # never ties: an answered ask stays answered by what answered it.
+            # `order` holds no DM channel (see above): a DM has no threads in practice
+            # and a follow-up in a DM is a top-level message the poll reads, so DMs stay
+            # out of this sweep as they stay out of the open-ask sweep.
             fu_key = threads.followup_window_key(src.name)
             for i, ch in enumerate(order):
                 if budget <= 0:

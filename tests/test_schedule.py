@@ -1238,6 +1238,28 @@ class DmAnsweredStateTest(SchedulerHarness):
         self.assertEqual(adapter.calls, 0, "DM asks spent the thread-sweep budget")
         self.assertEqual(adapter.roots_swept, set())
 
+    def test_an_answered_dm_ask_spends_no_follow_up_sweep_budget(self):
+        """Issue #8 meets the DM rule: the follow-up sweep reads asks answered within
+        FOLLOWUP_WINDOW_S, and a DM ask the DM rule closed is one. A DM has no threads in
+        practice and a follow-up in it is a top-level message the poll reads, so DM
+        channels stay out of the follow-up sweep as they stay out of the open-ask sweep;
+        otherwise every answered DM ask costs a replies() call each cycle for a day."""
+        adapter, sched = self.dm()
+        adapter.seed([msg(self.DM, "1.0", "where is the dashboard?", sender_id="U_HUMAN")])
+        sched.cycle()
+        adapter.seed([msg(self.DM, "2.0", "it is at http://127.0.0.1:8502", sender_id="U_BOT")])
+        self.assertEqual(sched.cycle()["answered"], 1)
+        self.assertEqual(self.journal.get(self.DM, "1.0")["response_key"], "dm-reply:2.0")
+        for _ in range(3):
+            sched.cycle()
+        self.assertEqual(adapter.calls, 0, "an answered DM ask spent the follow-up sweep's budget")
+        self.assertEqual(adapter.roots_swept, set())
+        # the DM's own follow-up still arrives, by the poll, and is owed when it is an ask
+        adapter.seed([msg(self.DM, "3.0", "and where are the logs?", sender_id="U_HUMAN")])
+        sched.cycle()
+        self.assertEqual({r["id"] for r in self.owed.open_items()}, {f"msg@{self.DM}@3.0"})
+        self.assertEqual(adapter.calls, 0)
+
     def test_a_reply_inside_a_dm_thread_is_not_a_top_level_answer(self):
         """Review X3: the DM rule reads top-level messages only. A reply under ask 1.0's
         thread belongs to that thread — it must not close ask 2.0, the most recent open

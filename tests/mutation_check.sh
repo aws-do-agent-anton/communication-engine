@@ -3498,6 +3498,11 @@ run_mutation "scheduler: a truncated follow-up sweep prints no line" \
   "('    for ch in summary.get(\"followup_truncated\", ()):', '    for ch in ():')" \
   "test_schedule"
 
+run_mutation "schedule: answered DM asks spend the follow-up sweep's budget" \
+  "core/schedule.py" \
+  "('            fu_key = threads.followup_window_key(src.name)\n            for i, ch in enumerate(order):', '            fu_key = threads.followup_window_key(src.name)\n            for i, ch in enumerate(src.channels):')" \
+  "test_schedule"
+
 echo
 echo "mutation_check: caught=$PASS survived/error=$FAIL"
 [ "$FAIL" -eq 0 ] && { echo "PASS — every removed property turned the suite red"; exit 0; }
