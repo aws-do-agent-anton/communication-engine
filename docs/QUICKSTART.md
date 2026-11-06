@@ -478,6 +478,12 @@ surface says so instead of implying one.
   `conversations.replies` is far lower for commercially distributed non-Marketplace apps
   than for an internal app, so a distributed app should expect asks to close more slowly,
   never faster — and at about one call per cycle it needs that window fix first.
+  After the open asks, what they left of the budget sweeps the threads of asks
+  answered in the last 24 hours (`FOLLOWUP_WINDOW_S`), most recently answered first
+  and rotating, so a reply posted under an answer is listed, and owed when it is a
+  question; the answered ask keeps the reply that answered it. DM channels stay out of
+  this sweep as they stay out of the open-ask sweep: a follow-up in a DM is a top-level
+  message, which the poll reads. That sweep's refusals print as `followup-sweep:` lines.
 - Five adapters ship: **`fake`** (in-memory dry-run), **`slack`** (poll / replies / resolve /
   health, and one send — `chat.postMessage`, reachable only through `core/outbox.py` at policy
   `staged`, authorized for the aws-do-agent harness's bot token only; `tests/test_slack_adapter.py`

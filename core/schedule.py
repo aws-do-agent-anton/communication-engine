@@ -186,6 +186,7 @@ class Scheduler:
         polled = fresh = answered = 0
         sweep_rate_limited, sweep_truncated, sweep_errors = [], [], []
         sweep_skipped, dm_refused = [], []
+        followup_rate_limited, followup_truncated = [], []
         for src in self.sources:
             for ch in src.channels:
                 cursor = self.store.cursor_get(src.name, ch)
@@ -277,6 +278,34 @@ class Scheduler:
                         m.get("text") or "", _src.taxonomy,
                         attachments=m.get("attachments")).kind not in ACTIONABLE_KINDS,
                     refusals=dm_refused))        # named, like the sweep's (round 2, R2-13)
+            # Issue #8: then the threads of asks answered within FOLLOWUP_WINDOW_S, so a
+            # follow-up under an answer (often a new question) is listed and, when it is
+            # an ask, owed. Lowest priority: only what the open asks left of this budget,
+            # one call still reserved for every channel waiting, nothing after a 429. It
+            # never ties: an answered ask stays answered by what answered it.
+            # `order` holds no DM channel (see above): a DM has no threads in practice
+            # and a follow-up in a DM is a top-level message the poll reads, so DMs stay
+            # out of this sweep as they stay out of the open-ask sweep.
+            fu_key = threads.followup_window_key(src.name)
+            for i, ch in enumerate(order):
+                if budget <= 0:
+                    break
+                fu = threads.sweep_followups(
+                    src.adapter, self.store, self.journal, ch,
+                    max_threads=max(1, budget - (len(order) - 1 - i)),
+                    start=self.store.sweep_start_get(fu_key, ch))
+                if fu is None:
+                    break               # no replies(): declared absent for this source
+                budget -= fu["calls"]
+                # Journaled before the window commits past them, as above (review R2-2).
+                fresh += self._journal_and_route(ch, fu["replies"], src)
+                self.store.sweep_start_set(fu_key, ch, fu["next_start"])
+                if fu["rate_limited"]:
+                    followup_rate_limited.append((ch, fu["rate_limited"]))
+                    budget = 0
+                if fu["truncated"]:
+                    followup_truncated.append(ch)
+                sweep_errors.extend((ch, ts, msg) for ts, msg in fu["errors"])
             # The channel that took the bulk — the one that SPENT the most — goes to the
             # back (review F3: rotating position 0 let a small channel's turn hand the
             # bulk straight back to the same backlog channel); skipped ones go first.
@@ -294,6 +323,8 @@ class Scheduler:
                 "unattended": unattended, "next_interval": self._interval,
                 "sweep_rate_limited": sweep_rate_limited,
                 "sweep_truncated": sweep_truncated, "sweep_errors": sweep_errors,
+                "followup_rate_limited": followup_rate_limited,
+                "followup_truncated": followup_truncated,
                 "sweep_skipped": sweep_skipped, "dm_refused": dm_refused}
 
     def _sweep_order_for(self, src) -> list:

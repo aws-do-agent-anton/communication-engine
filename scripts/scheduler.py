@@ -90,6 +90,13 @@ def report_lines(summary) -> list:
     for ch, why in summary.get("dm_refused", ()):
         # the DM rule declined a whole channel; an empty answered count would hide it
         lines.append(f"dm-rule: REFUSED channel={ch} — {why}")
+    # Issue #8: the follow-up sweep's own refusals (it reports thread errors with the rest).
+    for ch, method in summary.get("followup_rate_limited", ()):
+        lines.append(f"followup-sweep: RATE-LIMITED channel={ch} method={method} — "
+                     "follow-ups under answered asks not looked for this cycle")
+    for ch in summary.get("followup_truncated", ()):
+        lines.append(f"followup-sweep: TRUNCATED channel={ch} — more recently answered "
+                     "threads than this cycle's leftover budget; the rest wait for a later cycle")
     return lines
 
 

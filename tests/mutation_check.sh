@@ -2389,7 +2389,7 @@ run_mutation "threads: the asker's own follow-up counts as the answer" \
 # 'no answers' — the F-2 silent-no-op shape.
 run_mutation "threads: an adapter without replies() reads as 'nothing new'" \
   "core/threads.py" \
-  "('    if not hasattr(adapter, \"replies\"):\n        return None', '    if not hasattr(adapter, \"replies\"):\n        return {\"swept\": 0, \"replies\": [], \"answered\": [], \"truncated\": False, \"rate_limited\": None}')" \
+  "('    if not hasattr(adapter, \"replies\"):\n        return None\n    open_asks = open_asks_for(journal, channel)', '    if not hasattr(adapter, \"replies\"):\n        return {\"swept\": 0, \"replies\": [], \"answered\": [], \"truncated\": False, \"rate_limited\": None}\n    open_asks = open_asks_for(journal, channel)')" \
   "test_threads"
 
 # ENH-30 — STATEMENTs are never swept: one platform call per remark, and remarks would be
@@ -2476,14 +2476,14 @@ run_mutation "docs: the answered-state explanation vanishes from the quickstart"
 # is the F-2 silent no-op. Recorded BY ASK or not at all.
 run_mutation "threads: a platform error on one thread is swallowed" \
   "core/threads.py" \
-  "('            result[\"errors\"].extend((str(r[\"ts\"]), f\"{type(ex).__name__}: {ex}\")\n                                    for r in rows)', '            pass')" \
+  "('            reached = min(pos[str(r[\"ts\"])] for r in rows)    # this root was not fetched\n            break\n        except Exception as ex:  # noqa: BLE001 — recorded by ask, never swallowed\n            result[\"errors\"].extend((str(r[\"ts\"]), f\"{type(ex).__name__}: {ex}\")\n                                    for r in rows)', '            reached = min(pos[str(r[\"ts\"])] for r in rows)    # this root was not fetched\n            break\n        except Exception as ex:  # noqa: BLE001 — recorded by ask, never swallowed\n            pass')" \
   "test_threads"
 
 # The inverted dual-write: a store-derived floor skips a reply that is stored but not
 # yet journaled, and a broadcast bump hides an earlier real answer.
 run_mutation "threads: the fetch floor is the newest stored reply, not the ask" \
   "core/threads.py" \
-  "('        oldest = min((str(r[\"ts\"]) for r in rows), key=ts_order)', '        oldest = max([str(r[\"ts\"]) for r in rows] + [str(m[\"ts\"]) for m in store.thread_replies(channel, root)], key=ts_order)')" \
+  "('        # not journaled (the inverted dual-write).\n        oldest = min((str(r[\"ts\"]) for r in rows), key=ts_order)', '        # not journaled (the inverted dual-write).\n        oldest = max([str(r[\"ts\"]) for r in rows] + [str(m[\"ts\"]) for m in store.thread_replies(channel, root)], key=ts_order)')" \
   "test_threads"
 
 # Only replies AFTER the ask can answer it.
@@ -2670,7 +2670,7 @@ run_mutation "schedule: the scheduler forgets where the sweep window stopped" \
 # review F12 — a non-orderable id space is refused, never guessed.
 run_mutation "threads: a non-orderable id space is swept as if chronological" \
   "core/threads.py" \
-  "('        if ts_order(row[\"ts\"])[0] != 0:', '        if False:')" \
+  "('    for row in batch:\n        if ts_order(row[\"ts\"])[0] != 0:', '    for row in batch:\n        if False:')" \
   "test_threads"
 
 # review F11 — the sweep's lookups are indexed.
@@ -3487,6 +3487,64 @@ run_mutation "slack: the HTTP status is dropped from an ok:false error" \
   "channels/slack/adapter.py" \
   "('            raise ApiError(method, payload.get(\"error\", \"unknown_error\"), status=status)', '            raise ApiError(method, payload.get(\"error\", \"unknown_error\"))')" \
   "test_slack_adapter"
+
+# Issue #8 — follow-ups under answered asks: swept inside the window only, asks only, never a
+# root the open-ask sweep owns, bounded, resumed at the root a 429 refused, run by the cycle
+# at the lowest priority from the same budget, and reported.
+run_mutation "threads: the follow-up sweep ignores its window" \
+  "core/threads.py" \
+  "('journal.answered(channel, since=since)', 'journal.answered(channel)')" \
+  "test_threads"
+
+run_mutation "threads: the follow-up sweep takes statements too" \
+  "core/threads.py" \
+  "('since=since) if r[\"kind\"] in ACTIONABLE_KINDS]', 'since=since) if True]')" \
+  "test_threads"
+
+run_mutation "threads: the follow-up sweep fetches a root the open-ask sweep owns" \
+  "core/threads.py" \
+  "('        if root in open_roots:\n            continue', '        if False:\n            continue')" \
+  "test_threads"
+
+run_mutation "threads: the follow-up sweep is unbounded" \
+  "core/threads.py" \
+  "('    window = turn[:max_threads]', '    window = turn')" \
+  "test_threads"
+
+run_mutation "threads: the follow-up window skips the root a 429 refused" \
+  "core/threads.py" \
+  "('            reached = i                 # this root was not fetched: resume at it', '            reached = i + 1')" \
+  "test_threads"
+
+run_mutation "schedule: the cycle never sweeps follow-ups" \
+  "core/schedule.py" \
+  "('fu = threads.sweep_followups(', 'fu = None and threads.sweep_followups(')" \
+  "test_schedule"
+
+run_mutation "schedule: follow-up calls are not charged against the budget" \
+  "core/schedule.py" \
+  "('                budget -= fu[\"calls\"]', '                pass')" \
+  "test_schedule"
+
+run_mutation "scheduler: a truncated follow-up sweep prints no line" \
+  "scripts/scheduler.py" \
+  "('    for ch in summary.get(\"followup_truncated\", ()):', '    for ch in ():')" \
+  "test_schedule"
+
+run_mutation "schedule: answered DM asks spend the follow-up sweep's budget" \
+  "core/schedule.py" \
+  "('            fu_key = threads.followup_window_key(src.name)\n            for i, ch in enumerate(order):', '            fu_key = threads.followup_window_key(src.name)\n            for i, ch in enumerate(src.channels):')" \
+  "test_schedule"
+
+run_mutation "threads: the follow-up sweep swallows a platform error on one thread" \
+  "core/threads.py" \
+  "('            reached = i                 # this root was not fetched: resume at it\n            break\n        except Exception as ex:  # noqa: BLE001 — recorded by ask, never swallowed\n            result[\"errors\"].extend((str(r[\"ts\"]), f\"{type(ex).__name__}: {ex}\")\n                                    for r in rows)', '            reached = i                 # this root was not fetched: resume at it\n            break\n        except Exception as ex:  # noqa: BLE001 — recorded by ask, never swallowed\n            pass')" \
+  "test_threads"
+
+run_mutation "threads: the follow-up sweep fetches a non-orderable id as if chronological" \
+  "core/threads.py" \
+  "('    for row in recently_answered_for(journal, channel, now - window_s):\n        if ts_order(row[\"ts\"])[0] != 0:', '    for row in recently_answered_for(journal, channel, now - window_s):\n        if False:')" \
+  "test_threads"
 
 echo
 echo "mutation_check: caught=$PASS survived/error=$FAIL"
