@@ -13,10 +13,17 @@
 #   pre-push   -> sanitize gate + unit tests + mutation check (the full gate set)
 set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
-# The hooks directory as git resolves it: a fresh `git init` on a host with an empty template
-# has none, and in a linked worktree it lives in the common .git directory, not under $ROOT.
-HOOKS="$(git rev-parse --path-format=absolute --git-path hooks)"
+# This clone's own hooks directory, in the common .git directory: a fresh `git init` on a host
+# with an empty template has none, and a linked worktree keeps it there, not under $ROOT. Never
+# the directory core.hooksPath names: that one is often shared by every repository on the host,
+# and these hooks would then run this repository's gates in all of them.
+HOOKS="$(git rev-parse --path-format=absolute --git-common-dir)/hooks"
 mkdir -p "$HOOKS"
+if ! [ "$(git rev-parse --path-format=absolute --git-path hooks)" -ef "$HOOKS" ]; then
+  echo "install-hooks: WARNING core.hooksPath ($(git config --get core.hooksPath)) points git at another" \
+       "hooks directory, so the hooks installed in $HOOKS do not run in this clone until it points" \
+       "here: git config core.hooksPath \"$HOOKS\"" >&2
+fi
 
 cat > "$HOOKS/pre-commit" <<'EOF'
 #!/usr/bin/env bash

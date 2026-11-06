@@ -2843,6 +2843,16 @@ run_mutation "install-hooks: the commit-msg hook accepts every message" \
   "('exec bash \"\$R/scripts/sanitize-text.sh\" \"\$1\"', 'exec true')" \
   "test_sanitize_text"
 
+run_mutation "install-hooks: the hooks go wherever core.hooksPath points (often shared)" \
+  "scripts/install-hooks.sh" \
+  "('HOOKS=\"\$(git rev-parse --path-format=absolute --git-common-dir)/hooks\"', 'HOOKS=\"\$(git rev-parse --path-format=absolute --git-path hooks)\"')" \
+  "test_sanitize_text"
+
+run_mutation "install-hooks: a core.hooksPath that bypasses the installed hooks goes unreported" \
+  "scripts/install-hooks.sh" \
+  "('if ! [ \"\$(git rev-parse --path-format=absolute --git-path hooks)\" -ef \"\$HOOKS\" ]; then', 'if false; then')" \
+  "test_sanitize_text"
+
 # ---- ENH-31 slice C: the loopback-only API base, the payload scan, the config keys ----
 run_mutation "slack: a non-loopback COMMS_SLACK_API_BASE is accepted" \
   "channels/slack/adapter.py" \

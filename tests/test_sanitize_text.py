@@ -138,6 +138,28 @@ class CommitMsgHookTest(unittest.TestCase):
             ok = _git(repo, "commit", "-q", "-m", "a clean message", env=env)
             self.assertEqual(ok.returncode, 0, ok.stdout + ok.stderr)
 
+    def test_a_core_hooks_path_directory_is_never_written(self):
+        """core.hooksPath is often global, one directory shared by every repository on the host.
+        Writing this repository's hooks there runs its gates in all the others, and the gate
+        script does not exist there, so their commits fail. The hooks go to the clone's own
+        hooks directory, and the operator is told that git will not run them there."""
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _repo(tmp)
+            scripts = repo / "scripts"; scripts.mkdir()
+            for f in (GATE, SCRIPT, HOOKS):
+                shutil.copy(f, scripts / f.name)
+            shared = pathlib.Path(tmp) / "shared-hooks"; shared.mkdir()
+            r = _git(repo, "config", "core.hooksPath", str(shared)); self.assertEqual(r.returncode, 0, r.stderr)
+            r = subprocess.run(["bash", str(scripts / "install-hooks.sh")], cwd=repo, text=True,
+                               capture_output=True, timeout=60)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertEqual(sorted(p.name for p in shared.iterdir()), [],
+                             "install-hooks.sh wrote into the core.hooksPath directory")
+            for hook in ("pre-commit", "commit-msg", "pre-push"):
+                self.assertTrue((repo / ".git" / "hooks" / hook).is_file(), f"{hook} not installed")
+            self.assertIn("core.hooksPath", r.stderr,
+                          "the operator was not told git will not run the installed hooks")
+
 
 if __name__ == "__main__":
     unittest.main()
