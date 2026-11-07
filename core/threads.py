@@ -50,10 +50,12 @@ replier other than the asker — no platform call, so the sweep's window and a 4
 hold a visibly answered ask open. Measured on the aws-do-agent integration (operator,
 2026-10-31): asks whose thread anyone could see on the platform read UNANSWERED for as long
 as the bounded sweep took to reach them, and the dashboard kept "qualifying them as
-unanswered". The sweep stays the route for a thread that grows AFTER its parent was polled:
-a cursored history poll never serves a parent twice. An ask tied here is answered like any
-other, so `sweep_followups()` lists a reply posted under it later; when the source names
-`answerers`, only theirs tie another person's ask here too.
+unanswered". The sweep stays the route for a thread that grows AFTER its parent was polled
+while that ask is still open: a cursored history poll never serves a parent twice, and the
+sweep works from open asks. Once an ask is tied, by either route, `sweep_followups()` fetches
+its thread like any answered ask's for FOLLOWUP_WINDOW_S, so a question already in it, or
+posted there later, is journaled and owed; when the source names `answerers`, only theirs
+tie another person's ask here too.
 """
 from __future__ import annotations
 
@@ -213,8 +215,11 @@ def answered_from_summary(adapter, journal, channel: str, messages, *, answerers
     open — a replier the platform did not name would be a guess, and the engine never
     guesses. The replies' text is not in view here, so the sweep's `is_answer` verdict
     cannot be applied; the setting that turns this route on turns that verdict off too
-    (core/schedule.py: a reply that is itself a question still answers, and is owed on
-    its own row). The tie is stamped at the poll that sighted the summary (`at` default):
+    (core/schedule.py: in the sweep a reply that is itself a question still answers, and
+    is owed on its own row). This route fetches no thread, so a question already in a tied
+    ask's thread is not journaled HERE; the follow-up sweep of answered asks' threads
+    (`sweep_followups()`, issue #8) fetches it, in this cycle or a later one. The tie is
+    stamped at the poll that sighted the summary (`at` default):
     the reply's own platform time predates the row's first sighting, and a tie stamped
     there would read every such ask as EDITED AFTER RESPONSE.
 

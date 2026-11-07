@@ -463,7 +463,8 @@ surface says so instead of implying one.
   ingest, when the polled row's own thread summary (the adapter's optional
   thread_summary(), from Slack's reply_users on a history parent) names such a replier; the
   summary carries no text, so that route cannot tell a follow-up question from an answer,
-  and with the setting on the sweep counts any such reply too; or, in a 1:1 direct message
+  and with the setting on the sweep counts any such reply too — a teammate's "+1" or
+  question, an app's auto-reply; or, in a 1:1 direct message
   (declared or inferred), by the next top-level message that is an answer, which closes the
   most recent open ask it can answer (never its own sender's), once — in a DM a message
   closes at most one ask, ever; in a thread one reply closes every open ask under its root,
@@ -471,8 +472,9 @@ surface says so instead of implying one.
   by the sweep or the DM rule (a thread summary names repliers only, so the ingest route
   cannot see the engine's delivery metadata); a reply inside a DM's thread is not credited
   (0 of 535 DM messages measured in-thread), and DM asks spend no thread-sweep budget. An
-  ask tied at ingest is answered like any other, so the follow-up sweep of the last 24 h
-  lists a reply posted under it later. "Responded" means exactly that, not
+  ask tied at ingest, or by any route, is answered like any other, so for 24 h the
+  follow-up sweep fetches its thread: a question already in it, or posted there later, is
+  journaled and owed. "Responded" means exactly that, not
   "resolved": a third party's "+1" closes an ask too, and the dashboard counts
   thread-closed asks apart from answers sent from here. A reply posted top-level in the
   channel by anyone else is stored and listed but cannot be tied to the ask, and the

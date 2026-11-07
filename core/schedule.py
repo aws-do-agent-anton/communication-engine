@@ -125,11 +125,13 @@ class Source:
     dm_channels: tuple = ()
     # threaded_is_answered (2026-10-31): a message that has a thread is answered. ON: an
     # open ask whose polled row shows a reply from someone other than the asker is tied
-    # at ingest (core/threads.answered_from_summary, no platform call), and in the sweep
-    # any such reply answers, a question included (the follow-up is owed on its own
-    # row). OFF: the sweep is the one in-thread route and a reply that is itself an ask
-    # does not answer (review F7). Per source, like the taxonomy: what counts as an
-    # answer in a 1:1 channel with an agent differs from a team's support channel.
+    # at ingest (core/threads.answered_from_summary, no platform call - the thread is
+    # fetched later by the follow-up sweep, which journals a question in it), and in the
+    # sweep any such reply answers, a question included (there the follow-up is fetched
+    # and owed on its own row). OFF: the sweep is the one in-thread route and a reply
+    # that is itself an ask does not answer (review F7). Per source, like the taxonomy:
+    # what counts as an answer in a 1:1 channel with an agent differs from a team's
+    # support channel.
     threaded_is_answered: bool = True
 
 
@@ -263,7 +265,7 @@ class Scheduler:
                 # never the answer (review F7); the source's vocabulary decides —
                 # unless the source counts a message that has a thread as answered
                 # (threaded_is_answered): then any reply from someone else answers,
-                # and the follow-up question is owed on its own row.
+                # and the follow-up question, fetched here, is owed on its own row.
                 is_answer = None
                 if not src.threaded_is_answered:
                     is_answer = lambda m, _src=src: classify(  # noqa: E731
