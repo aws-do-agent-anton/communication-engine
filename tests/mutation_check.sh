@@ -2675,12 +2675,12 @@ run_mutation "schedule: the sweep keeps the classifier's verdict with the route 
 
 run_mutation "threads: the asker alone in the thread summary counts as the answer" \
   "core/threads.py" \
-  "('                    if r and r != asker and r not in UNATTRIBUTED_SENDERS]', '                    if r and r not in UNATTRIBUTED_SENDERS]')" \
+  "('                    if r and r != asker and r not in UNATTRIBUTED_SENDERS\n', '                    if r and r not in UNATTRIBUTED_SENDERS\n')" \
   "test_threads"
 
 run_mutation "threads: the unattributed placeholder in the summary answers an ask" \
   "core/threads.py" \
-  "('                    if r and r != asker and r not in UNATTRIBUTED_SENDERS]', '                    if r and r != asker]')" \
+  "('                    if r and r != asker and r not in UNATTRIBUTED_SENDERS\n', '                    if r and r != asker\n')" \
   "test_threads"
 
 run_mutation "threads: an adapter without thread_summary() reads as 'no thread'" \
@@ -3071,7 +3071,7 @@ run_mutation "schedule: the DM rule never runs" \
 
 run_mutation "schedule: the sweep ignores the source's answerers" \
   "core/schedule.py" \
-  "('                    answerers=src.answerers)', '                    answerers=())')" \
+  "('                    is_answer=is_answer, answerers=src.answerers)', '                    is_answer=is_answer, answerers=())')" \
   "test_schedule"
 
 run_mutation "dashboard: asks closed by someone else are not listed" \
@@ -3129,7 +3129,12 @@ run_mutation "dashboard_write: a MISMATCH row is shown only next to a staged dra
 # ---- ENH-31 review round 1, second batch (F1 addendum, F4, F5, F10, N2, N3, N4, N7, X3, X5-X7) ----
 run_mutation "threads: an answerer's own ask can never close" \
   "core/threads.py" \
-  "('    restricted = bool(answerers) and asker not in answerers', '    restricted = bool(answerers)')" \
+  "('    restricted = bool(answerers) and asker not in answerers\n    for r in sorted(replies', '    restricted = bool(answerers)\n    for r in sorted(replies')" \
+  "test_threads"
+
+run_mutation "threads: an answerer's own ask can never be tied at ingest" \
+  "core/threads.py" \
+  "('        restricted = bool(answerers) and asker not in answerers\n        repliers', '        restricted = bool(answerers)\n        repliers')" \
   "test_threads"
 
 run_mutation "threads: an answerer's reply is dropped at its own open question" \
@@ -3154,12 +3159,17 @@ run_mutation "store: top_level_after admits thread replies" \
 
 run_mutation "scheduler.py: the DM channels are never wired into the Source" \
   "scripts/scheduler.py" \
-  "('                   answerers=inst.answerers, dm_channels=inst.dm_channels())', '                   answerers=inst.answerers, dm_channels=())')" \
+  "('                   answerers=inst.answerers, dm_channels=inst.dm_channels(),', '                   answerers=inst.answerers, dm_channels=(),')" \
   "test_schedule"
 
 run_mutation "scheduler.py: the answerers are never wired into the Source" \
   "scripts/scheduler.py" \
-  "('                   answerers=inst.answerers, dm_channels=inst.dm_channels())', '                   answerers=(), dm_channels=inst.dm_channels())')" \
+  "('                   answerers=inst.answerers, dm_channels=inst.dm_channels(),', '                   answerers=(), dm_channels=inst.dm_channels(),')" \
+  "test_schedule"
+
+run_mutation "scheduler.py: threaded_is_answered is never wired into the Source" \
+  "scripts/scheduler.py" \
+  "('                   threaded_is_answered=inst.threaded_is_answered)', '                   threaded_is_answered=True)')" \
   "test_schedule"
 
 run_mutation "dashboard_write: the surface's outbox is built without the marker" \

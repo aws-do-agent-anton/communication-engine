@@ -1508,6 +1508,16 @@ class SchedulerScriptWiringTest(unittest.TestCase):
         self.assertEqual(tuple(src.answerers), ("U_BOT", "U_OPERATOR"),
                          "the answerer list died in the wiring — a bystander closes asks")
         self.assertFalse(src.escalate_ambiguous)
+        self.assertTrue(src.threaded_is_answered, "the default is on")
+
+    def test_threaded_is_answered_off_reaches_the_source(self):
+        root = Path(__file__).resolve().parent.parent
+        raw = {"engine": {"state_dir": "state", "channels_dir": str(root / "channels")},
+               "instances": [{"name": "team", "adapter": "fake", "threaded_is_answered": False,
+                              "channels": [{"id": "C_CUST"}]}]}
+        (src,) = self.sources(raw)
+        self.assertFalse(src.threaded_is_answered,
+                         "threaded_is_answered: false died in the wiring — the setting is inert")
 
 
 class ReportLinesTest(unittest.TestCase):
